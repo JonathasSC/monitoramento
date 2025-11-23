@@ -1,0 +1,115 @@
+services:
+  # ---------------------------------------------------------
+  # NGINX 
+  # ---------------------------------------------------------
+  nginx:
+    container_name: nginx
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/shortly.prod.conf:/etc/nginx/conf.d/default.conf
+      - static_volume:/usr/share/nginx/html
+    networks:
+      - monitoramento_net
+
+  # ---------------------------------------------------------
+  # ZABBIX SERVER (MySQL no host)
+  # ---------------------------------------------------------
+  zabbix-server:
+    image: zabbix/zabbix-server-mysql:alpine-latest
+    container_name: zabbix-server
+    restart: always
+    environment:
+      DB_SERVER_HOST: host.docker.internal
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "10051:10051"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - monitoramento_net
+
+  # ---------------------------------------------------------
+  # ZABBIX WEB
+  # ---------------------------------------------------------
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-mysql:alpine-latest
+    container_name: zabbix-web
+    restart: always
+    environment:
+      ZBX_SERVER_HOST: zabbix-server
+      DB_SERVER_HOST: host.docker.internal
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      PHP_TZ: "America/Sao_Paulo"
+    depends_on:
+      - zabbix-server
+    ports:
+      - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - monitoramento_net
+
+  # ---------------------------------------------------------
+  # GRAFANA
+  # ---------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASS}
+      TZ: "America/Sao_Paulo"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - monitoramento_net
+
+  # ---------------------------------------------------------
+  # UNIFI CONTROLLER
+  # ---------------------------------------------------------
+  unifi:
+    image: jacobalberty/unifi:latest
+    container_name: unifi
+    restart: always
+    environment:
+      TZ: "America/Sao_Paulo"
+    ports:
+      - "8443:8443"
+      - "3478:3478/udp"
+      - "8081:8081"
+      - "8080:8080"
+      - "8880:8880"
+      - "8843:8843"
+      - "6789:6789"
+    volumes:
+      - unifi_data:/unifi
+    networks:
+      - monitoramento_net
+
+# ---------------------------------------------------------
+# NETWORKS
+# ---------------------------------------------------------
+networks:
+  monitoramento_net:
+    driver: bridge
+
+# ---------------------------------------------------------
+# VOLUMES
+# ---------------------------------------------------------
+volumes:
+  grafana_data:
+  unifi_data:
+  static_volume:
